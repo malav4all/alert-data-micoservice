@@ -1,4 +1,4 @@
-import { IsString } from 'class-validator';
+import { IsNumber, IsString } from 'class-validator';
 
 export class AlertQueryDto {
   @IsString()
@@ -9,4 +9,10 @@ export class AlertQueryDto {
 
   @IsString()
   imei?: string;
+
+  @IsNumber()
+  page?: number;
+
+  @IsNumber()
+  limit?: number;
 }

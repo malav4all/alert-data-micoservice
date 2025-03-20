@@ -15,7 +15,13 @@ export class AlertService {
 
   constructor(@InjectModel('ALERT_DATA') private alertModel: Model<any>) {}
 
-  async getAlertData(startDate: string, endDate: string, imei: any) {
+  async getAlertData(
+    startDate: string,
+    endDate: string,
+    imei: any,
+    page: number = 1,
+    limit: number = 10,
+  ) {
     try {
       if (!startDate || !endDate || !imei) {
         throw new BadRequestException(
@@ -23,15 +29,20 @@ export class AlertService {
         );
       }
 
+      // Validate and set pagination parameters
+      page = page && page > 0 ? Math.floor(page) : 1;
+      limit = limit && limit > 0 ? Math.floor(limit) : 10;
+      const skip = (page - 1) * limit;
+
       const startDateUTC = this.convertISTtoUTC(startDate);
       const endDateUTC = this.convertISTtoUTC(endDate);
 
       this.logger.log(
-        `Fetching track data from ${startDateUTC} to ${endDateUTC}${imei ? ` for IMEI: ${imei}` : ''}`,
+        `Fetching track data from ${startDateUTC} to ${endDateUTC}${imei ? ` for IMEI: ${imei}` : ''}, page: ${page}, limit: ${limit}`,
       );
 
-      const aggregationPipeline: any = [];
-
+      // First pipeline to get the total count
+      const countPipeline: any = [];
       const matchStage: any = {
         $match: {
           dateTime: {
@@ -45,12 +56,24 @@ export class AlertService {
         matchStage.$match.imei = imei;
       }
 
-      aggregationPipeline.push(matchStage);
+      countPipeline.push(matchStage);
+      countPipeline.push({
+        $count: 'totalCount',
+      });
 
-      aggregationPipeline.push({
+      // Data pipeline with pagination
+      const dataPipeline: any = [];
+      dataPipeline.push(matchStage);
+      dataPipeline.push({
         $sort: { dateTime: 1 },
       });
-      aggregationPipeline.push({
+      dataPipeline.push({
+        $skip: skip,
+      });
+      dataPipeline.push({
+        $limit: limit,
+      });
+      dataPipeline.push({
         $project: {
           _id: 1,
           latitude: 1,
@@ -67,21 +90,27 @@ export class AlertService {
         },
       });
 
-      const result = await this.alertModel
-        .aggregate(aggregationPipeline)
-        .exec();
+      // Execute both pipelines in parallel
+      const [countResult, dataResult] = await Promise.all([
+        this.alertModel.aggregate(countPipeline).exec(),
+        this.alertModel.aggregate(dataPipeline).exec(),
+      ]);
 
-      if (result.length === 0) {
+      const totalCount = countResult.length > 0 ? countResult[0].totalCount : 0;
+
+      if (totalCount === 0 || dataResult.length === 0) {
         throw new NotFoundException(
           'No track data found for the given criteria',
         );
       }
 
-      this.logger.log(`Successfully retrieved ${result.length} track records`);
+      this.logger.log(
+        `Successfully retrieved ${dataResult.length} track records out of ${totalCount}`,
+      );
       return {
         success: true,
-        count: result.length,
-        data: result,
+        count: totalCount,
+        data: dataResult,
       };
     } catch (error) {
       this.handleError(error);

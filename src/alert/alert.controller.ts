@@ -16,12 +16,14 @@ export class AlertController {
   constructor(private readonly alertService: AlertService) {}
   @Get()
   async getAlertData(@Query() query: AlertQueryDto) {
-    const { startDate, endDate, imei } = query;
+    const { startDate, endDate, imei, page, limit } = query;
     try {
       const result = await this.alertService.getAlertData(
         startDate,
         endDate,
         imei,
+        page,
+        limit,
       );
 
       return result;
