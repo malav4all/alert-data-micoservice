@@ -99,9 +99,11 @@ export class AlertService {
       const totalCount = countResult.length > 0 ? countResult[0].totalCount : 0;
 
       if (totalCount === 0 || dataResult.length === 0) {
-        throw new NotFoundException(
-          'No track data found for the given criteria',
-        );
+        return {
+          success: false,
+          count: 0,
+          data: [],
+        };
       }
 
       this.logger.log(
